@@ -1,0 +1,1393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌍 Smart City Waste Management System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .location-marker { cursor: pointer; }
+        .location-marker > * { transition: transform 0.2s ease, filter 0.2s ease; transform-origin: center center; }
+        .location-marker:hover > * { filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3)); }
+        .location-marker:hover .bin-box { transform: scale(1.05); }
+        .progress-bar { transition: width 0.3s ease; }
+        .alert-pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        @keyframes dash { to { stroke-dashoffset: -30; } }
+        @keyframes truckMove { 0% { offset-distance: 0%; } 100% { offset-distance: 100%; } }
+        .route-line { stroke-dasharray: 15 10; animation: dash 1s linear infinite; }
+        .truck-icon { offset-rotate: auto; animation: truckMove 8s linear infinite; }
+        .card {
+            background: linear-gradient(145deg, rgba(51, 65, 85, 0.8), rgba(30, 41, 59, 0.9));
+            backdrop-filter: blur(10px);
+        }
+        .stat-card {
+            background: linear-gradient(145deg, rgba(51, 65, 85, 0.6), rgba(30, 41, 59, 0.8));
+            border: 1px solid rgba(100, 116, 139, 0.3);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.3); }
+        .route-btn { transition: all 0.2s ease; }
+        .route-btn:hover { transform: translateY(-1px); }
+        .map-container { border-radius: 16px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.3); }
+        .bin-card { transition: all 0.2s ease; }
+        .bin-card:hover { transform: translateX(4px); }
+        .notification { animation: slideIn 0.3s ease; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .hardware-badge { animation: hardwarePulse 1.5s infinite; }
+        @keyframes hardwarePulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); } 50% { box-shadow: 0 0 0 8px rgba(59, 130, 246, 0); } }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 min-h-screen text-white">
+    <div id="app" class="p-6 max-w-7xl mx-auto">
+        <!-- Header -->
+        <div class="mb-6">
+            <div class="flex items-center gap-3 mb-2">
+                <span class="text-4xl">♻️</span>
+                <h1 class="text-3xl font-bold">Smart City Waste Management</h1>
+                <span id="backend-status" class="ml-4 px-3 py-1 rounded-full text-xs font-medium"></span>
+                <span id="hardware-status" class="px-3 py-1 rounded-full text-xs font-medium"></span>
+            </div>
+            <p class="text-slate-400">Real-time IoT monitoring • 8 Locations × 2 Bins each • ML Route Optimization</p>
+        </div>
+
+        <!-- Stats Bar -->
+        <div id="stats-bar" class="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
+            <div class="stat-card rounded-xl p-4 text-center">
+                <p class="text-slate-400 text-sm">Locations</p>
+                <p id="stat-locations" class="text-2xl font-bold text-cyan-400">8</p>
+            </div>
+            <div class="stat-card rounded-xl p-4 text-center">
+                <p class="text-slate-400 text-sm">Total Bins</p>
+                <p id="stat-bins" class="text-2xl font-bold text-cyan-400">16</p>
+            </div>
+            <div class="stat-card rounded-xl p-4 text-center cursor-pointer hover:ring-2 ring-red-400" onclick="toggleAlertsPanel()">
+                <p class="text-slate-400 text-sm">🔴 Urgent</p>
+                <p id="stat-urgent" class="text-2xl font-bold text-red-400">0</p>
+            </div>
+            <div class="stat-card rounded-xl p-4 text-center cursor-pointer hover:ring-2 ring-yellow-400" onclick="toggleAlertsPanel()">
+                <p class="text-slate-400 text-sm">🟡 Warning</p>
+                <p id="stat-warning" class="text-2xl font-bold text-yellow-400">0</p>
+            </div>
+            <div class="stat-card rounded-xl p-4 text-center">
+                <p class="text-slate-400 text-sm">📊 Avg Fill</p>
+                <p id="stat-fill" class="text-2xl font-bold text-blue-400">0%</p>
+            </div>
+            <div class="stat-card rounded-xl p-4 text-center">
+                <p class="text-slate-400 text-sm">⏱️ Sim Time</p>
+                <p id="stat-time" class="text-2xl font-bold text-emerald-400">0h</p>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="flex flex-wrap gap-3 mb-6">
+            <button onclick="generateDemoData()" class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2">
+                🎲 Demo Scenario
+            </button>
+            <button onclick="collectAllUrgent()" class="bg-red-600 hover:bg-red-500 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2">
+                🚛 Collect All Urgent
+            </button>
+            <button onclick="refreshData()" class="bg-cyan-600 hover:bg-cyan-500 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2">
+                🔄 Refresh
+            </button>
+            <button onclick="toggleAlertsPanel()" class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2">
+                🔔 Alerts <span id="alert-badge" class="bg-red-500 text-xs px-2 py-0.5 rounded-full hidden">0</span>
+            </button>
+        </div>
+
+        <!-- Alerts Panel -->
+        <div id="alerts-panel" class="hidden card border border-red-700 rounded-xl p-6 mb-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-red-400">🚨 Active Alerts</h3>
+                <button onclick="toggleAlertsPanel()" class="text-slate-400 hover:text-white">✕</button>
+            </div>
+            <div id="alerts-content" class="space-y-2 max-h-64 overflow-y-auto"></div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Left: City Map -->
+            <div class="lg:col-span-2 space-y-6">
+                <div class="card border border-slate-700 rounded-xl p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <div>
+                            <h2 class="text-xl font-semibold flex items-center gap-2">
+                                📍 <span id="current-route-name">Route A: Central District</span>
+                            </h2>
+                            <p id="current-road-name" class="text-sm text-slate-400">Main Street & Park Avenue</p>
+                        </div>
+                        <button onclick="optimizeRoute()" class="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 px-5 py-2.5 rounded-lg font-semibold transition-all shadow-lg hover:shadow-xl flex items-center gap-2">
+                            ⚡ Optimize Route
+                        </button>
+                    </div>
+                    
+                    <div class="map-container">
+                        <svg id="city-map" width="100%" height="520" viewBox="0 0 750 620" class="border border-slate-600 rounded-lg" style="background: linear-gradient(180deg, #87CEEB 0%, #B0E0E6 100%);">
+                            <defs>
+                                <pattern id="roadDash" width="30" height="4" patternUnits="userSpaceOnUse">
+                                    <rect width="18" height="4" fill="#ffffff"/>
+                                </pattern>
+                                <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+                                    <feDropShadow dx="3" dy="3" stdDeviation="2" flood-opacity="0.3"/>
+                                </filter>
+                            </defs>
+                            <rect width="750" height="620" fill="#E8F5E9"/>
+                            
+                            <!-- Park -->
+                            <rect x="20" y="20" width="140" height="100" fill="#90EE90" rx="10"/>
+                            <text x="90" y="75" text-anchor="middle" class="text-xs font-bold" fill="#2E7D32">🌳 Park</text>
+                            
+                            <!-- Roads -->
+                            <rect x="0" y="180" width="750" height="60" fill="#555555"/>
+                            <rect x="0" y="205" width="750" height="6" fill="url(#roadDash)"/>
+                            <rect x="150" y="0" width="50" height="620" fill="#555555"/>
+                            <rect x="350" y="0" width="50" height="620" fill="#555555"/>
+                            <rect x="550" y="0" width="50" height="620" fill="#555555"/>
+                            <rect x="0" y="420" width="600" height="45" fill="#666666"/>
+                            
+                            <!-- Buildings -->
+                            <g filter="url(#shadow)">
+                                <rect x="220" y="40" width="110" height="70" fill="#FF6B6B" rx="5"/>
+                                <text x="275" y="85" text-anchor="middle" class="text-xs font-bold" fill="#C0392B">🛒 Mall</text>
+                            </g>
+                            <g filter="url(#shadow)">
+                                <rect x="420" y="50" width="100" height="60" fill="#FDFEFE" rx="3"/>
+                                <text x="470" y="90" text-anchor="middle" class="text-xs" fill="#E74C3C">🏥 Hospital</text>
+                            </g>
+                            <g filter="url(#shadow)">
+                                <rect x="620" y="40" width="100" height="80" fill="#85C1E9" rx="3"/>
+                                <text x="670" y="90" text-anchor="middle" class="text-xs" fill="#2471A3">🏢 Office</text>
+                            </g>
+                            <g filter="url(#shadow)">
+                                <rect x="220" y="280" width="100" height="80" fill="#76D7C4" rx="3"/>
+                                <text x="270" y="330" text-anchor="middle" class="text-xs" fill="#1E8449">🏠 Homes</text>
+                            </g>
+                            <g filter="url(#shadow)">
+                                <rect x="420" y="280" width="110" height="90" fill="#F5B041" rx="3"/>
+                                <text x="475" y="335" text-anchor="middle" class="text-xs" fill="#B7950B">🏬 Apartments</text>
+                            </g>
+                            <g filter="url(#shadow)">
+                                <rect x="220" y="480" width="120" height="70" fill="#F1948A" rx="3"/>
+                                <text x="280" y="525" text-anchor="middle" class="text-xs" fill="#C0392B">🏪 Market</text>
+                            </g>
+                            <g filter="url(#shadow)">
+                                <rect x="450" y="490" width="130" height="80" fill="#FAD7A0" rx="3"/>
+                                <text x="515" y="540" text-anchor="middle" class="text-xs" fill="#B7950B">🛍️ Shops</text>
+                            </g>
+                            
+                            <!-- Depot (START) -->
+                            <g id="depot-marker" filter="url(#shadow)">
+                                <rect x="30" y="480" width="90" height="60" fill="#8E44AD" rx="8"/>
+                                <text x="75" y="505" text-anchor="middle" class="text-xs font-bold" fill="white">🚛 DEPOT</text>
+                                <text x="75" y="525" text-anchor="middle" style="font-size:9px" fill="#D8BFD8">(START)</text>
+                            </g>
+                            
+                            <!-- Dumping Area (END) - Outside city -->
+                            <g id="dump-marker" filter="url(#shadow)">
+                                <rect x="650" y="260" width="85" height="55" fill="#795548" rx="8"/>
+                                <text x="692" y="285" text-anchor="middle" class="text-xs font-bold" fill="white">🏭 DUMP</text>
+                                <text x="692" y="302" text-anchor="middle" style="font-size:9px" fill="#BCAAA4">(END)</text>
+                            </g>
+                            
+                            <!-- Legend -->
+                            <g>
+                                <rect x="620" y="380" width="115" height="95" fill="rgba(255,255,255,0.95)" stroke="#BDC3C7" stroke-width="2" rx="8"/>
+                                <text x="677" y="400" text-anchor="middle" class="text-sm font-bold" fill="#2C3E50">Legend</text>
+                                <rect x="630" y="410" width="16" height="16" fill="#27AE60" rx="3"/>
+                                <text x="652" y="423" class="text-xs" fill="#2C3E50">Safe</text>
+                                <rect x="630" y="430" width="16" height="16" fill="#F39C12" rx="3"/>
+                                <text x="652" y="443" class="text-xs" fill="#2C3E50">Warning</text>
+                                <rect x="630" y="450" width="16" height="16" fill="#E74C3C" rx="3"/>
+                                <text x="652" y="463" class="text-xs" fill="#2C3E50">Critical</text>
+                            </g>
+                            
+                            <g id="route-path-container"></g>
+                            <g id="locations-container"></g>
+                        </svg>
+                    </div>
+
+                    <!-- Route Selector -->
+                    <div class="flex gap-3 mt-5 flex-wrap">
+                        <button onclick="selectRoute('A')" id="btn-route-A" class="route-btn px-5 py-2.5 rounded-lg font-semibold transition-all bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg">
+                            🏢 Route A (3 locations)
+                        </button>
+                        <button onclick="selectRoute('B')" id="btn-route-B" class="route-btn px-5 py-2.5 rounded-lg font-semibold transition-all bg-slate-700 text-slate-300 hover:bg-slate-600">
+                            🏠 Route B (3 locations)
+                        </button>
+                        <button onclick="selectRoute('C')" id="btn-route-C" class="route-btn px-5 py-2.5 rounded-lg font-semibold transition-all bg-slate-700 text-slate-300 hover:bg-slate-600">
+                            🏪 Route C (2 locations)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Optimization Results -->
+                <div id="optimization-result" class="hidden bg-emerald-900/30 border border-emerald-600 rounded-xl p-6">
+                    <div class="flex items-start gap-3">
+                        <span class="text-2xl">📊</span>
+                        <div class="flex-1">
+                            <h3 class="font-semibold text-emerald-300 mb-3">✅ ML Route Optimization Complete</h3>
+                            <div class="grid grid-cols-4 gap-4 text-sm mb-3">
+                                <div class="bg-slate-900/50 p-3 rounded">
+                                    <p class="text-slate-400">Best Route</p>
+                                    <p id="opt-route" class="text-xl font-bold text-emerald-400">-</p>
+                                </div>
+                                <div class="bg-slate-900/50 p-3 rounded">
+                                    <p class="text-slate-400">Avg Risk</p>
+                                    <p id="opt-risk" class="text-xl font-bold text-emerald-400">-</p>
+                                </div>
+                                <div class="bg-slate-900/50 p-3 rounded">
+                                    <p class="text-slate-400">Urgent Locations</p>
+                                    <p id="opt-urgent" class="text-xl font-bold text-red-400">-</p>
+                                </div>
+                                <div class="bg-slate-900/50 p-3 rounded">
+                                    <p class="text-slate-400">Distance</p>
+                                    <p id="opt-distance" class="text-xl font-bold text-emerald-400">-</p>
+                                </div>
+                            </div>
+                            <div id="opt-reason" class="text-xs text-slate-300 bg-slate-900/30 p-3 rounded mb-3"></div>
+                            <div id="opt-comparison" class="text-xs text-slate-400 bg-slate-800/50 p-2 rounded font-mono"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: Control Panel -->
+            <div class="space-y-6">
+                <!-- Time Control -->
+                <div class="card border border-slate-700 rounded-xl p-6">
+                    <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">⏰ Simulation Time</h3>
+                    <div class="space-y-4">
+                        <div class="bg-gradient-to-br from-slate-800 to-slate-900 p-5 rounded-xl text-center border border-slate-600">
+                            <p id="time-display" class="text-5xl font-bold text-cyan-400">0h</p>
+                            <p class="text-xs text-slate-400 mt-1">Elapsed Time</p>
+                        </div>
+                        <button onclick="advanceTime(1)" class="w-full bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 px-4 py-3 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg">
+                            ⏱️ +1 Hour
+                        </button>
+                        <button onclick="advanceTime(6)" class="w-full bg-gradient-to-r from-cyan-600 to-cyan-700 hover:from-cyan-700 hover:to-cyan-800 px-4 py-3 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg">
+                            ⏱️ +6 Hours
+                        </button>
+                        <button onclick="resetSimulation()" class="w-full bg-slate-600 hover:bg-slate-500 px-4 py-2.5 rounded-lg font-semibold transition-colors">
+                            🔄 Reset Simulation
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Location Details -->
+                <div id="location-details" class="card border border-slate-700 rounded-xl p-6">
+                    <h3 class="text-lg font-semibold mb-4">📍 Select a Location</h3>
+                    <p class="text-slate-400 text-sm">Click on any location marker on the map to view details</p>
+                </div>
+
+                <!-- Add Waste Panel -->
+                <div id="add-waste-panel" class="hidden card border border-slate-700 rounded-xl p-6">
+                    <h3 class="text-lg font-semibold mb-4">➕ Add Waste to Location</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Select Bin</label>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button id="btn-wet-bin" onclick="selectBinType('wet')" class="p-3 rounded-lg border-2 border-green-500 bg-green-900/30 text-center transition-all hover:bg-green-800/40">
+                                    <span class="text-2xl">💧</span>
+                                    <p class="text-sm font-semibold text-green-400">WET Bin</p>
+                                    <p class="text-xs text-slate-400">Organic waste</p>
+                                </button>
+                                <button id="btn-dry-bin" onclick="selectBinType('dry')" class="p-3 rounded-lg border-2 border-slate-600 bg-slate-800/30 text-center transition-all hover:bg-slate-700/40">
+                                    <span class="text-2xl">📦</span>
+                                    <p class="text-sm font-semibold text-blue-400">DRY Bin</p>
+                                    <p class="text-xs text-slate-400">Recyclables</p>
+                                </button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Waste Type</label>
+                            <select id="waste-type" class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white">
+                                <option value="food">🍎 Food Waste</option>
+                                <option value="organic">🌿 Organic Matter</option>
+                                <option value="paper">📄 Paper</option>
+                                <option value="plastic">🥤 Plastic</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Quantity (kg): <span id="qty-label" class="text-cyan-400 font-bold">5kg</span></label>
+                            <input type="range" id="waste-qty" min="1" max="20" value="5" class="w-full" oninput="document.getElementById('qty-label').textContent = this.value + 'kg'">
+                        </div>
+                        <button onclick="addWaste()" class="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 px-4 py-3 rounded-lg font-semibold transition-all shadow-md">
+                            ➕ Add Waste to Bin
+                        </button>
+                        <button onclick="emptySelectedBin()" class="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 px-4 py-3 rounded-lg font-semibold transition-all shadow-md">
+                            🗑️ Empty Selected Bin
+                        </button>
+                        <button onclick="emptyBothBins()" class="w-full bg-slate-600 hover:bg-slate-500 px-4 py-2.5 rounded-lg font-semibold transition-colors">
+                            🚛 Collect Both Bins
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="mt-8 text-center text-slate-500 text-sm">
+            <p>🌍 Smart City Waste Management System | 8 Locations × 2 Bins | IoT + ML Route Optimization</p>
+            <p class="mt-1">Backend: <a href="http://localhost:5000/api/health" target="_blank" class="text-cyan-400 hover:underline">localhost:5000</a></p>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        // CONFIGURATION
+        // ============================================================
+        const API_BASE = 'http://localhost:5000/api';
+        
+        const ROUTE_INFO = {
+            'A': { name: 'Route A: Central District', road: 'Main Street & Park Avenue', color: '#3B82F6' },
+            'B': { name: 'Route B: Residential Zone', road: 'Oak Road & Elm Street', color: '#10B981' },
+            'C': { name: 'Route C: Market District', road: 'Market Street & Central Plaza', color: '#F59E0B' }
+        };
+
+        const LOCATION_POSITIONS = {
+            'A1': { x: 180, y: 120 }, 'A2': { x: 375, y: 100 }, 'A3': { x: 575, y: 130 },
+            'B1': { x: 175, y: 320 }, 'B2': { x: 375, y: 350 }, 'B3': { x: 575, y: 320 },
+            'C1': { x: 280, y: 520 }, 'C2': { x: 520, y: 550 }
+        };
+
+        // Fixed positions for depot (start) and dump (end)
+        const DEPOT_POS = { x: 75, y: 510 };
+        const DUMP_POS = { x: 692, y: 287 };
+        
+        // Route waypoints: DEPOT -> locations -> DUMP (following roads)
+        const ROUTE_PATHS = {
+            'A': [
+                DEPOT_POS,                    // Start at Depot
+                { x: 75, y: 442 },            // Go up on vertical road
+                { x: 175, y: 442 },           // Turn right onto horizontal road
+                { x: 175, y: 210 },           // Go up to main road
+                { x: 180, y: 210 },           // Near A1
+                { x: 180, y: 120 },           // A1
+                { x: 375, y: 120 },           // Move to A2 area
+                { x: 375, y: 100 },           // A2
+                { x: 575, y: 100 },           // Move to A3 area
+                { x: 575, y: 130 },           // A3
+                { x: 575, y: 210 },           // Back to road
+                { x: 692, y: 210 },           // Go right
+                DUMP_POS                      // End at Dump
+            ],
+            'B': [
+                DEPOT_POS,                    // Start at Depot
+                { x: 75, y: 442 },            // Go up
+                { x: 175, y: 442 },           // Right on lower road
+                { x: 175, y: 320 },           // B1
+                { x: 375, y: 320 },           // Move to B2
+                { x: 375, y: 350 },           // B2
+                { x: 575, y: 350 },           // Move to B3
+                { x: 575, y: 320 },           // B3
+                { x: 575, y: 210 },           // Up to main road
+                { x: 692, y: 210 },           // Right to dump
+                DUMP_POS                      // End at Dump
+            ],
+            'C': [
+                DEPOT_POS,                    // Start at Depot
+                { x: 120, y: 510 },           // Move right
+                { x: 175, y: 510 },           // On vertical road
+                { x: 175, y: 442 },           // Up to lower horizontal
+                { x: 280, y: 442 },           // Right towards C1
+                { x: 280, y: 520 },           // C1
+                { x: 375, y: 520 },           // Move right
+                { x: 520, y: 520 },           // Near C2
+                { x: 520, y: 550 },           // C2
+                { x: 575, y: 550 },           // Right to vertical road
+                { x: 575, y: 287 },           // Up towards dump
+                DUMP_POS                      // End at Dump
+            ]
+        };
+
+        const WASTE_TYPES = {
+            food: { density: 0.8, decomposition_rate: 0.15, methane_multiplier: 2.0 },
+            paper: { density: 0.3, decomposition_rate: 0.08, methane_multiplier: 0.5 },
+            plastic: { density: 1.2, decomposition_rate: 0.02, methane_multiplier: 0.3 },
+            organic: { density: 0.6, decomposition_rate: 0.20, methane_multiplier: 2.5 }
+        };
+
+        // ============================================================
+        // STATE
+        // ============================================================
+        let allLocations = {};
+        let selectedRoute = 'A';
+        let selectedLocation = null;
+        let selectedBinType = 'wet';
+        let simulationTime = 0;
+        let backendAvailable = false;
+        let hardwareConnected = false;
+        let showAlertsPanel = false;
+        let activeRoutePath = null;  // Currently displayed route path
+
+        // ============================================================
+        // BACKEND CHECK
+        // ============================================================
+        async function checkBackend() {
+            try {
+                const res = await fetch(`${API_BASE}/health`, { method: 'GET', signal: AbortSignal.timeout(3000) });
+                const data = await res.json();
+                backendAvailable = data.status === 'success';
+                hardwareConnected = data.hardware_connected || false;
+                updateBackendStatus();
+                return backendAvailable;
+            } catch (err) {
+                backendAvailable = false;
+                hardwareConnected = false;
+                updateBackendStatus();
+                return false;
+            }
+        }
+
+        function updateBackendStatus() {
+            const el = document.getElementById('backend-status');
+            const hw = document.getElementById('hardware-status');
+            
+            if (backendAvailable) {
+                el.textContent = '🟢 Backend Online';
+                el.className = 'ml-4 px-3 py-1 rounded-full text-xs font-medium bg-green-900/50 text-green-400 border border-green-600';
+            } else {
+                el.textContent = '🔴 Backend Offline (Local Mode)';
+                el.className = 'ml-4 px-3 py-1 rounded-full text-xs font-medium bg-red-900/50 text-red-400 border border-red-600';
+            }
+            
+            if (hardwareConnected) {
+                hw.textContent = '⚡ ESP32 Connected';
+                hw.className = 'hardware-badge px-3 py-1 rounded-full text-xs font-medium bg-blue-900/50 text-blue-400 border border-blue-600';
+            } else {
+                hw.textContent = '📡 No Hardware';
+                hw.className = 'px-3 py-1 rounded-full text-xs font-medium bg-slate-800 text-slate-500 border border-slate-600';
+            }
+        }
+
+        // ============================================================
+        // API FUNCTIONS (with fallback)
+        // ============================================================
+        async function fetchLocations() {
+            if (backendAvailable) {
+                try {
+                    const res = await fetch(`${API_BASE}/locations`);
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        allLocations = data.locations;
+                        simulationTime = data.time;
+                        hardwareConnected = data.hardware_connected || false;
+                        updateBackendStatus();
+                        updateUI();
+                        return;
+                    }
+                } catch (err) {
+                    console.warn('Backend fetch failed, using local');
+                }
+            }
+            // Fallback: local mock data
+            if (Object.keys(allLocations).length === 0) {
+                initializeMockData();
+            }
+            updateUI();
+        }
+
+        async function advanceTime(hours) {
+            if (backendAvailable) {
+                try {
+                    const res = await fetch(`${API_BASE}/simulation/advance`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ hours })
+                    });
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        allLocations = data.locations;
+                        simulationTime = data.current_time;
+                        hardwareConnected = data.hardware_connected || false;
+                        updateBackendStatus();
+                        updateUI();
+                        showNotification(`⏱️ +${hours}h. Decomposition & methane updated!`, 'success');
+                        return;
+                    }
+                } catch (err) {
+                    console.warn('Backend advance failed, using local');
+                }
+            }
+            // Local fallback
+            simulationTime += hours;
+            simulateDecompositionLocal(hours);
+            updateUI();
+            showNotification(`⏱️ +${hours}h (local mode). Decomposition & methane updated!`, 'info');
+        }
+
+        async function addWaste() {
+            if (!selectedLocation) {
+                showNotification('Select a location first!', 'warning');
+                return;
+            }
+            
+            const wasteType = document.getElementById('waste-type').value;
+            const quantity = parseInt(document.getElementById('waste-qty').value);
+            const binId = `${selectedLocation.id}_${selectedBinType.toUpperCase()}`;
+            const bin = selectedLocation.bins[binId];
+            
+            // Check DRY bin restrictions
+            if (selectedBinType === 'dry' && !['paper', 'plastic'].includes(wasteType)) {
+                showNotification(`DRY bins only accept paper/plastic, not ${wasteType}!`, 'error');
+                return;
+            }
+            
+            // ===== EDGE CASE: Pre-check bin capacity (before API call) =====
+            if (bin.fill_level >= 100) {
+                showNotification(`🚫 Bin ${binId} is FULL (100%)! Cannot add more waste. Please empty the bin first.`, 'error');
+                return;
+            }
+            
+            if (bin.fill_level >= 95) {
+                showNotification(`⚠️ Bin ${binId} is almost full (${bin.fill_level.toFixed(1)}%)! Cannot add more waste.`, 'error');
+                return;
+            }
+            
+            const projectedFill = bin.fill_level + (quantity * 8);
+            if (projectedFill > 100) {
+                const maxQty = Math.floor((100 - bin.fill_level) / 8);
+                if (maxQty <= 0) {
+                    showNotification(`🚫 Bin ${binId} is too full! Cannot add more waste.`, 'error');
+                    return;
+                }
+                showNotification(`⚠️ Adding ${quantity}kg would overflow! Current: ${bin.fill_level.toFixed(1)}%. Max you can add: ${maxQty}kg`, 'warning');
+                return;
+            }
+
+            if (backendAvailable) {
+                try {
+                    const res = await fetch(`${API_BASE}/locations/${selectedLocation.id}/bins/${binId}/add-waste`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ type: wasteType, quantity })
+                    });
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        allLocations[selectedLocation.id].bins[binId] = data.bin;
+                        allLocations[selectedLocation.id].location_risk = data.location_risk;
+                        allLocations[selectedLocation.id].status = data.location_status;
+                        selectedLocation = allLocations[selectedLocation.id];
+                        updateUI();
+                        const c = data.changes;
+                        showNotification(`➕ ${quantity}kg ${wasteType} to ${binId}. Fill: ${c.fill_level.old}%→${c.fill_level.new}%, Risk: ${c.location_risk.old}→${c.location_risk.new}`, 'success');
+                        return;
+                    } else if (data.status === 'error') {
+                        showNotification(data.message, 'error');
+                        return;
+                    }
+                } catch (err) {
+                    console.warn('Backend add-waste failed, using local');
+                }
+            }
+            // Local fallback
+            const success = addWasteLocal(selectedLocation.id, binId, wasteType, quantity);
+            if (success) {
+                updateUI();
+                showNotification(`➕ ${quantity}kg ${wasteType} to ${binId} (local)`, 'success');
+            }
+        }
+
+        async function optimizeRoute() {
+            if (backendAvailable) {
+                try {
+                    const res = await fetch(`${API_BASE}/routes/optimize`);
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        showOptimizationResult(data.optimization);
+                        return;
+                    }
+                } catch (err) {
+                    console.warn('Backend optimize failed, using local');
+                }
+            }
+            // Local fallback
+            const result = calculateOptimalRouteLocal();
+            showOptimizationResult(result);
+        }
+
+        async function resetSimulation() {
+            if (backendAvailable) {
+                try {
+                    const res = await fetch(`${API_BASE}/simulation/reset`, { method: 'POST' });
+                    if (res.ok) {
+                        simulationTime = 0;
+                        fetchLocations();
+                        showNotification('🔄 Simulation reset!', 'info');
+                        document.getElementById('optimization-result').classList.add('hidden');
+                        selectedLocation = null;
+                        document.getElementById('add-waste-panel').classList.add('hidden');
+                        showLocationPlaceholder();
+                        return;
+                    }
+                } catch (err) {}
+            }
+            simulationTime = 0;
+            initializeMockData();
+            showNotification('🔄 Simulation reset (local)!', 'info');
+            document.getElementById('optimization-result').classList.add('hidden');
+            selectedLocation = null;
+            document.getElementById('add-waste-panel').classList.add('hidden');
+            showLocationPlaceholder();
+        }
+
+        async function generateDemoData() {
+            if (backendAvailable) {
+                try {
+                    const res = await fetch(`${API_BASE}/simulation/demo`, { method: 'POST' });
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        allLocations = data.locations;
+                        simulationTime = data.current_time;
+                        updateUI();
+                        showNotification('🎲 Demo ready! A1, B2 critical. Click Optimize!', 'success');
+                        return;
+                    }
+                } catch (err) {}
+            }
+            // Local demo
+            initializeMockData();
+            makeCriticalLocal(['A1', 'B2']);
+            simulationTime = 6;
+            updateUI();
+            showNotification('🎲 Demo ready (local)! A1, B2 critical.', 'success');
+        }
+
+        // ============================================================
+        // LOCAL SIMULATION (Fallback)
+        // ============================================================
+        function initializeMockData() {
+            const configs = {
+                'A1': { route: 'A', name: 'Koregaon Park Corner' },
+                'A2': { route: 'A', name: 'MG Road Junction' },
+                'A3': { route: 'A', name: 'FC Road Plaza' },
+                'B1': { route: 'B', name: 'Aundh IT Park' },
+                'B2': { route: 'B', name: 'Baner Hills' },
+                'B3': { route: 'B', name: 'Pashan Lake View' },
+                'C1': { route: 'C', name: 'Deccan Gymkhana' },
+                'C2': { route: 'C', name: 'Shivajinagar Market' }
+            };
+
+            allLocations = {};
+            for (const [locId, config] of Object.entries(configs)) {
+                let wetBin, dryBin;
+                
+                if (locId === 'A1') {
+                    wetBin = { id: `${locId}_WET`, type: 'wet', fill_level: 30, methane: 100, decomposition: 20, waste_composition: { food: 2, paper: 0, plastic: 0, organic: 1 }, is_real_hardware: true };
+                    dryBin = { id: `${locId}_DRY`, type: 'dry', fill_level: 50, weight: 15, waste_composition: { food: 0, paper: 3, plastic: 2, organic: 0 }, is_real_hardware: false };
+                } else {
+                    wetBin = { id: `${locId}_WET`, type: 'wet', fill_level: Math.random() * 25 + 20, methane: Math.random() * 90 + 60, decomposition: Math.random() * 20 + 15, waste_composition: { food: Math.floor(Math.random() * 3) + 1, paper: 0, plastic: 0, organic: Math.floor(Math.random() * 2) }, is_real_hardware: false };
+                    dryBin = { id: `${locId}_DRY`, type: 'dry', fill_level: Math.random() * 25 + 25, weight: Math.random() * 20 + 10, waste_composition: { food: 0, paper: Math.floor(Math.random() * 3) + 1, plastic: Math.floor(Math.random() * 2) + 1, organic: 0 }, is_real_hardware: false };
+                }
+
+                allLocations[locId] = { id: locId, name: config.name, route: config.route, bins: { [`${locId}_WET`]: wetBin, [`${locId}_DRY`]: dryBin } };
+            }
+            updateUI();
+        }
+
+        function makeCriticalLocal(locIds) {
+            for (const locId of locIds) {
+                const loc = allLocations[locId];
+                if (!loc) continue;
+                const wet = loc.bins[`${locId}_WET`];
+                const dry = loc.bins[`${locId}_DRY`];
+                if (wet) { wet.fill_level = 80 + Math.random() * 15; wet.methane = 400 + Math.random() * 150; wet.decomposition = 55 + Math.random() * 25; wet.waste_composition = { food: 12, paper: 2, plastic: 1, organic: 8 }; }
+                if (dry) { dry.fill_level = 70 + Math.random() * 20; dry.weight = 55 + Math.random() * 25; }
+            }
+        }
+
+        function simulateDecompositionLocal(hours) {
+            for (const location of Object.values(allLocations)) {
+                for (const bin of Object.values(location.bins)) {
+                    // SKIP A1_WET if hardware connected
+                    if (bin.id === 'A1_WET' && hardwareConnected) continue;
+                    
+                    if (bin.type === 'wet') {
+                        if (bin.fill_level > 0) {
+                            bin.decomposition = Math.min(100, bin.decomposition + 0.5 * hours);
+                        }
+                        
+                        const decompFactor = bin.decomposition / 100;
+                        const totalWaste = Object.values(bin.waste_composition || {}).reduce((a, b) => a + b, 0);
+                        
+                        if (totalWaste > 0) {
+                            let methaneGen = 0;
+                            for (const [type, qty] of Object.entries(bin.waste_composition)) {
+                                if (qty > 0 && WASTE_TYPES[type]) {
+                                    methaneGen += qty * WASTE_TYPES[type].methane_multiplier * decompFactor;
+                                }
+                            }
+                            bin.methane = Math.min(1000, bin.methane + methaneGen * 0.1 * hours);
+                        }
+                    }
+                }
+            }
+        }
+
+        function addWasteLocal(locationId, binId, wasteType, quantity) {
+            const bin = allLocations[locationId].bins[binId];
+            const config = WASTE_TYPES[wasteType];
+            
+            // ===== EDGE CASE: Check if bin is already full =====
+            if (bin.fill_level >= 100) {
+                showNotification(`🚫 Bin ${binId} is FULL (100%)! Cannot add more waste. Please empty the bin first.`, 'error');
+                return false;
+            }
+            
+            if (bin.fill_level >= 95) {
+                showNotification(`⚠️ Bin ${binId} is almost full (${bin.fill_level.toFixed(1)}%)! Cannot add more waste.`, 'error');
+                return false;
+            }
+            
+            // ===== EDGE CASE: Check if adding would overflow =====
+            const fillIncrease = quantity * 8;
+            const projectedFill = bin.fill_level + fillIncrease;
+            
+            if (projectedFill > 100) {
+                const maxQty = Math.floor((100 - bin.fill_level) / 8);
+                if (maxQty <= 0) {
+                    showNotification(`🚫 Bin ${binId} is too full! Cannot add more waste.`, 'error');
+                    return false;
+                }
+                showNotification(`⚠️ Adding ${quantity}kg would overflow! Max you can add: ${maxQty}kg`, 'warning');
+                return false;
+            }
+
+            bin.fill_level = Math.min(100, bin.fill_level + quantity * 8);
+            
+            if (bin.type === 'dry') {
+                bin.weight = Math.min(100, bin.weight + quantity * config.density);
+            } else {
+                // Decomposition starts immediately, methane is NOT immediate
+                bin.decomposition = Math.min(100, bin.decomposition + quantity * config.decomposition_rate);
+            }
+            
+            bin.waste_composition[wasteType] = (bin.waste_composition[wasteType] || 0) + quantity;
+            return true;
+        }
+
+        function calculateOptimalRouteLocal() {
+            const routeDistances = { 'A': 8.5, 'B': 12.5, 'C': 6.0 };
+            const routeScores = {};
+
+            for (const routeId of ['A', 'B', 'C']) {
+                const locs = Object.values(allLocations).filter(l => l.route === routeId);
+                const risks = locs.map(l => calculateLocationRisk(l));
+                const avgRisk = risks.reduce((a, b) => a + b, 0) / risks.length;
+                const maxRisk = Math.max(...risks);
+                const urgentLocs = locs.filter(l => calculateLocationRisk(l) > 60);
+                const warningLocs = locs.filter(l => { const r = calculateLocationRisk(l); return r > 40 && r <= 60; });
+                const distance = routeDistances[routeId];
+                const score = (avgRisk * 0.4 + urgentLocs.length * 15) / (1 + distance * 0.05);
+
+                routeScores[routeId] = {
+                    name: ROUTE_INFO[routeId].name,
+                    avg_risk: avgRisk,
+                    max_risk: maxRisk,
+                    urgent_count: urgentLocs.length,
+                    warning_count: warningLocs.length,
+                    locations_count: locs.length,
+                    distance_km: distance,
+                    optimization_score: score,
+                    locations: locs.map(l => ({ id: l.id, name: l.name, risk: calculateLocationRisk(l) })).sort((a, b) => b.risk - a.risk),
+                    urgent_locations: urgentLocs.map(l => ({ id: l.id, name: l.name, risk: calculateLocationRisk(l) })),
+                    collection_order: locs.filter(l => calculateLocationRisk(l) > 40).sort((a, b) => calculateLocationRisk(b) - calculateLocationRisk(a)).map(l => l.id)
+                };
+            }
+
+            const best = Object.entries(routeScores).reduce((a, b) => b[1].optimization_score > a[1].optimization_score ? b : a);
+            const bestId = best[0], bestData = best[1];
+
+            const comparison = Object.entries(routeScores).map(([rid, r]) => 
+                `Route ${rid}: score=${r.optimization_score.toFixed(2)}, urgent=${r.urgent_count}, avg=${r.avg_risk.toFixed(1)}, dist=${r.distance_km}km${rid === bestId ? ' → BEST' : ''}`
+            );
+
+            return {
+                best_route: bestId,
+                best_route_name: bestData.name,
+                reason: `Route ${bestId} selected (score ${bestData.optimization_score.toFixed(2)}). ${bestData.urgent_count} urgent, ${bestData.warning_count} warning. Avg: ${bestData.avg_risk.toFixed(1)}, Max: ${bestData.max_risk.toFixed(1)}. ${bestData.distance_km}km. Order: ${bestData.collection_order.join('→') || 'None urgent'}`,
+                formula: '(avg_risk × 0.4 + urgent_count × 15) / (1 + distance × 0.05)',
+                comparison: comparison,
+                collection_order: bestData.collection_order,
+                urgent_locations: bestData.urgent_locations,
+                all_routes: routeScores
+            };
+        }
+
+        // ============================================================
+        // RISK CALCULATIONS
+        // ============================================================
+        function calculateBinRisk(bin) {
+            if (bin.type === 'wet') {
+                return Math.min(100, bin.fill_level * 0.4 + Math.min(bin.methane / 10, 100) * 0.35 + bin.decomposition * 0.25);
+            } else {
+                return Math.min(100, bin.fill_level * 0.6 + Math.min(bin.weight, 100) * 0.4);
+            }
+        }
+
+        function calculateLocationRisk(location) {
+            const wet = location.bins[`${location.id}_WET`];
+            const dry = location.bins[`${location.id}_DRY`];
+            // USE MAX for safety-critical
+            return Math.max(calculateBinRisk(wet), calculateBinRisk(dry));
+        }
+
+        function getRiskStatus(risk) {
+            if (risk > 70) return 'urgent';
+            if (risk > 40) return 'warning';
+            return 'normal';
+        }
+
+        function getRiskColor(risk) {
+            if (risk > 70) return '#ef4444';
+            if (risk > 40) return '#f59e0b';
+            return '#10b981';
+        }
+
+        // ============================================================
+        // UI FUNCTIONS
+        // ============================================================
+        function updateUI() {
+            updateStats();
+            drawLocations();
+            updateTimeDisplay();
+            updateAlertBadge();
+            if (selectedLocation) {
+                selectedLocation = allLocations[selectedLocation.id];
+                showLocationDetails(selectedLocation);
+            }
+            if (showAlertsPanel) updateAlertsPanel();
+        }
+
+        function updateStats() {
+            const locs = Object.values(allLocations);
+            const risks = locs.map(l => calculateLocationRisk(l));
+            let totalFill = 0, binCount = 0;
+            for (const loc of locs) {
+                for (const bin of Object.values(loc.bins)) {
+                    totalFill += bin.fill_level;
+                    binCount++;
+                }
+            }
+            document.getElementById('stat-locations').textContent = locs.length;
+            document.getElementById('stat-bins').textContent = binCount;
+            document.getElementById('stat-urgent').textContent = risks.filter(r => r > 70).length;
+            document.getElementById('stat-warning').textContent = risks.filter(r => r > 40 && r <= 70).length;
+            document.getElementById('stat-fill').textContent = binCount > 0 ? (totalFill / binCount).toFixed(0) + '%' : '0%';
+            document.getElementById('stat-time').textContent = simulationTime + 'h';
+        }
+
+        function updateTimeDisplay() {
+            document.getElementById('time-display').textContent = simulationTime + 'h';
+        }
+
+        function updateAlertBadge() {
+            let count = 0;
+            for (const loc of Object.values(allLocations)) {
+                if (calculateLocationRisk(loc) > 70) count++;
+                const wet = loc.bins[`${loc.id}_WET`];
+                if (wet && wet.methane > 300) count++;
+            }
+            const badge = document.getElementById('alert-badge');
+            if (count > 0) { badge.textContent = count; badge.classList.remove('hidden'); }
+            else { badge.classList.add('hidden'); }
+        }
+
+        function drawLocations() {
+            const container = document.getElementById('locations-container');
+            container.innerHTML = '';
+
+            for (const location of Object.values(allLocations)) {
+                const pos = LOCATION_POSITIONS[location.id];
+                if (!pos) continue;
+                
+                const risk = calculateLocationRisk(location);
+                const color = getRiskColor(risk);
+                const isSelected = selectedLocation?.id === location.id;
+                const isOnRoute = location.route === selectedRoute;
+                const scale = isSelected ? 1.2 : 1;
+
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.classList.add('location-marker');
+                g.onclick = () => selectLocation(location);
+                g.style.opacity = isOnRoute ? '1' : '0.5';
+
+                // Shadow
+                const shadow = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+                shadow.setAttribute('cx', pos.x); shadow.setAttribute('cy', pos.y + 35 * scale);
+                shadow.setAttribute('rx', 25 * scale); shadow.setAttribute('ry', 8 * scale);
+                shadow.setAttribute('fill', 'rgba(0,0,0,0.3)');
+                g.appendChild(shadow);
+
+                // Box (add bin-box class for hover effect)
+                const box = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                box.classList.add('bin-box');
+                box.setAttribute('x', pos.x - 30 * scale); box.setAttribute('y', pos.y - 25 * scale);
+                box.setAttribute('width', 60 * scale); box.setAttribute('height', 50 * scale);
+                box.setAttribute('rx', 8); box.setAttribute('fill', color);
+                box.setAttribute('stroke', isSelected ? '#fff' : ROUTE_INFO[location.route].color);
+                box.setAttribute('stroke-width', isSelected ? '4' : '2');
+                g.appendChild(box);
+
+                // Icons
+                const wetIcon = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                wetIcon.setAttribute('x', pos.x - 12 * scale); wetIcon.setAttribute('y', pos.y + 5 * scale);
+                wetIcon.setAttribute('text-anchor', 'middle'); wetIcon.setAttribute('font-size', `${18 * scale}px`);
+                wetIcon.textContent = '💧';
+                g.appendChild(wetIcon);
+
+                const dryIcon = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                dryIcon.setAttribute('x', pos.x + 15 * scale); dryIcon.setAttribute('y', pos.y + 5 * scale);
+                dryIcon.setAttribute('text-anchor', 'middle'); dryIcon.setAttribute('font-size', `${18 * scale}px`);
+                dryIcon.textContent = '📦';
+                g.appendChild(dryIcon);
+
+                // Label
+                const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                label.setAttribute('x', pos.x); label.setAttribute('y', pos.y + 45 * scale);
+                label.setAttribute('text-anchor', 'middle'); label.setAttribute('font-size', '12px');
+                label.setAttribute('font-weight', 'bold'); label.setAttribute('fill', ROUTE_INFO[location.route].color);
+                label.setAttribute('stroke', '#fff'); label.setAttribute('stroke-width', '2'); label.setAttribute('paint-order', 'stroke');
+                label.textContent = location.id;
+                g.appendChild(label);
+
+                // Hardware indicator
+                const wet = location.bins[`${location.id}_WET`];
+                if (wet && wet.is_real_hardware) {
+                    const hw = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    hw.setAttribute('x', pos.x + 35 * scale); hw.setAttribute('y', pos.y - 20 * scale);
+                    hw.setAttribute('font-size', '16px'); hw.textContent = '⚡';
+                    g.appendChild(hw);
+                }
+
+                // Risk badge
+                const badgeCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                badgeCircle.setAttribute('cx', pos.x - 30 * scale); badgeCircle.setAttribute('cy', pos.y - 30 * scale);
+                badgeCircle.setAttribute('r', 14 * scale); badgeCircle.setAttribute('fill', '#1e293b');
+                badgeCircle.setAttribute('stroke', color); badgeCircle.setAttribute('stroke-width', '2');
+                g.appendChild(badgeCircle);
+                
+                const badgeText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                badgeText.setAttribute('x', pos.x - 30 * scale); badgeText.setAttribute('y', pos.y - 26 * scale);
+                badgeText.setAttribute('text-anchor', 'middle'); badgeText.setAttribute('font-size', `${10 * scale}px`);
+                badgeText.setAttribute('font-weight', 'bold'); badgeText.setAttribute('fill', '#fff');
+                badgeText.textContent = Math.round(risk);
+                g.appendChild(badgeText);
+
+                container.appendChild(g);
+            }
+        }
+
+        // ============================================================
+        // ROUTE PATH VISUALIZATION
+        // ============================================================
+        function drawRoutePath(routeId, collectionOrder = null) {
+            const container = document.getElementById('route-path-container');
+            container.innerHTML = '';
+            
+            const waypoints = ROUTE_PATHS[routeId];
+            if (!waypoints || waypoints.length < 2) return;
+            
+            const color = ROUTE_INFO[routeId].color;
+            
+            // Build path string
+            let pathD = `M ${waypoints[0].x} ${waypoints[0].y}`;
+            for (let i = 1; i < waypoints.length; i++) {
+                pathD += ` L ${waypoints[i].x} ${waypoints[i].y}`;
+            }
+            
+            // Shadow/glow path
+            const shadowPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            shadowPath.setAttribute('d', pathD);
+            shadowPath.setAttribute('fill', 'none');
+            shadowPath.setAttribute('stroke', color);
+            shadowPath.setAttribute('stroke-width', '12');
+            shadowPath.setAttribute('stroke-opacity', '0.3');
+            shadowPath.setAttribute('stroke-linecap', 'round');
+            shadowPath.setAttribute('stroke-linejoin', 'round');
+            container.appendChild(shadowPath);
+            
+            // Main animated route line
+            const routeLine = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            routeLine.setAttribute('d', pathD);
+            routeLine.setAttribute('fill', 'none');
+            routeLine.setAttribute('stroke', color);
+            routeLine.setAttribute('stroke-width', '5');
+            routeLine.setAttribute('stroke-linecap', 'round');
+            routeLine.setAttribute('stroke-linejoin', 'round');
+            routeLine.classList.add('route-line');
+            container.appendChild(routeLine);
+            
+            // Direction arrows along the path
+            const arrowPositions = [0.15, 0.35, 0.55, 0.75, 0.92];
+            arrowPositions.forEach(t => {
+                const pos = getPointOnPath(waypoints, t);
+                const nextPos = getPointOnPath(waypoints, Math.min(t + 0.05, 1));
+                const angle = Math.atan2(nextPos.y - pos.y, nextPos.x - pos.x) * 180 / Math.PI;
+                
+                const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                arrow.setAttribute('points', '-6,-4 6,0 -6,4');
+                arrow.setAttribute('fill', '#fff');
+                arrow.setAttribute('transform', `translate(${pos.x}, ${pos.y}) rotate(${angle})`);
+                container.appendChild(arrow);
+            });
+            
+            // Truck icon at start (animated)
+            const truckG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            truckG.setAttribute('style', `offset-path: path("${pathD}"); offset-rotate: auto;`);
+            truckG.classList.add('truck-icon');
+            
+            const truckBg = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            truckBg.setAttribute('r', '16');
+            truckBg.setAttribute('fill', color);
+            truckBg.setAttribute('stroke', '#fff');
+            truckBg.setAttribute('stroke-width', '2');
+            truckG.appendChild(truckBg);
+            
+            const truckText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            truckText.setAttribute('text-anchor', 'middle');
+            truckText.setAttribute('dominant-baseline', 'central');
+            truckText.setAttribute('font-size', '14px');
+            truckText.textContent = '🚛';
+            truckG.appendChild(truckText);
+            
+            container.appendChild(truckG);
+            
+            // START label at depot
+            const startLabel = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            const startBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            startBg.setAttribute('x', DEPOT_POS.x - 25); startBg.setAttribute('y', DEPOT_POS.y - 45);
+            startBg.setAttribute('width', '50'); startBg.setAttribute('height', '20');
+            startBg.setAttribute('rx', '4'); startBg.setAttribute('fill', '#8E44AD');
+            startLabel.appendChild(startBg);
+            const startText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            startText.setAttribute('x', DEPOT_POS.x); startText.setAttribute('y', DEPOT_POS.y - 31);
+            startText.setAttribute('text-anchor', 'middle'); startText.setAttribute('font-size', '10px');
+            startText.setAttribute('font-weight', 'bold'); startText.setAttribute('fill', '#fff');
+            startText.textContent = '▶ START';
+            startLabel.appendChild(startText);
+            container.appendChild(startLabel);
+            
+            // END label at dump
+            const endLabel = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            const endBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            endBg.setAttribute('x', DUMP_POS.x - 20); endBg.setAttribute('y', DUMP_POS.y - 45);
+            endBg.setAttribute('width', '40'); endBg.setAttribute('height', '20');
+            endBg.setAttribute('rx', '4'); endBg.setAttribute('fill', '#795548');
+            endLabel.appendChild(endBg);
+            const endText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            endText.setAttribute('x', DUMP_POS.x); endText.setAttribute('y', DUMP_POS.y - 31);
+            endText.setAttribute('text-anchor', 'middle'); endText.setAttribute('font-size', '10px');
+            endText.setAttribute('font-weight', 'bold'); endText.setAttribute('fill', '#fff');
+            endText.textContent = '■ END';
+            endLabel.appendChild(endText);
+            container.appendChild(endLabel);
+            
+            // Add stop numbers if collection order provided
+            if (collectionOrder && collectionOrder.length > 0) {
+                collectionOrder.forEach((locId, idx) => {
+                    const pos = LOCATION_POSITIONS[locId];
+                    if (!pos) return;
+                    
+                    const stopCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    stopCircle.setAttribute('cx', pos.x + 35); stopCircle.setAttribute('cy', pos.y - 35);
+                    stopCircle.setAttribute('r', '12'); stopCircle.setAttribute('fill', '#E74C3C');
+                    stopCircle.setAttribute('stroke', '#fff'); stopCircle.setAttribute('stroke-width', '2');
+                    container.appendChild(stopCircle);
+                    
+                    const stopText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    stopText.setAttribute('x', pos.x + 35); stopText.setAttribute('y', pos.y - 31);
+                    stopText.setAttribute('text-anchor', 'middle'); stopText.setAttribute('font-size', '11px');
+                    stopText.setAttribute('font-weight', 'bold'); stopText.setAttribute('fill', '#fff');
+                    stopText.textContent = idx + 1;
+                    container.appendChild(stopText);
+                });
+            }
+            
+            activeRoutePath = routeId;
+        }
+        
+        function getPointOnPath(waypoints, t) {
+            // Calculate total path length
+            let totalLength = 0;
+            const segments = [];
+            for (let i = 1; i < waypoints.length; i++) {
+                const dx = waypoints[i].x - waypoints[i-1].x;
+                const dy = waypoints[i].y - waypoints[i-1].y;
+                const len = Math.sqrt(dx*dx + dy*dy);
+                segments.push({ start: waypoints[i-1], end: waypoints[i], length: len });
+                totalLength += len;
+            }
+            
+            // Find point at t (0-1)
+            let targetLen = t * totalLength;
+            let accumulated = 0;
+            for (const seg of segments) {
+                if (accumulated + seg.length >= targetLen) {
+                    const segT = (targetLen - accumulated) / seg.length;
+                    return {
+                        x: seg.start.x + (seg.end.x - seg.start.x) * segT,
+                        y: seg.start.y + (seg.end.y - seg.start.y) * segT
+                    };
+                }
+                accumulated += seg.length;
+            }
+            return waypoints[waypoints.length - 1];
+        }
+        
+        function clearRoutePath() {
+            document.getElementById('route-path-container').innerHTML = '';
+            activeRoutePath = null;
+        }
+
+        function selectRoute(routeId, collectionOrder = null) {
+            selectedRoute = routeId;
+            document.getElementById('current-route-name').textContent = ROUTE_INFO[routeId].name;
+            document.getElementById('current-road-name').textContent = ROUTE_INFO[routeId].road;
+            document.querySelectorAll('.route-btn').forEach(btn => btn.className = 'route-btn px-5 py-2.5 rounded-lg font-semibold transition-all bg-slate-700 text-slate-300 hover:bg-slate-600');
+            document.getElementById(`btn-route-${routeId}`).className = 'route-btn px-5 py-2.5 rounded-lg font-semibold transition-all bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg';
+            selectedLocation = null;
+            document.getElementById('add-waste-panel').classList.add('hidden');
+            showLocationPlaceholder();
+            drawLocations();
+            // Draw route path with optional collection order
+            drawRoutePath(routeId, collectionOrder);
+        }
+
+        function selectLocation(location) {
+            selectedLocation = location;
+            showLocationDetails(location);
+            document.getElementById('add-waste-panel').classList.remove('hidden');
+            selectBinType('wet');
+            drawLocations();
+        }
+
+        function selectBinType(type) {
+            selectedBinType = type;
+            const wetBtn = document.getElementById('btn-wet-bin');
+            const dryBtn = document.getElementById('btn-dry-bin');
+            const wasteSelect = document.getElementById('waste-type');
+            
+            if (type === 'wet') {
+                wetBtn.className = 'p-3 rounded-lg border-2 border-green-500 bg-green-900/50 text-center transition-all';
+                dryBtn.className = 'p-3 rounded-lg border-2 border-slate-600 bg-slate-800/30 text-center transition-all hover:bg-slate-700/40';
+                wasteSelect.innerHTML = '<option value="food">🍎 Food Waste</option><option value="organic">🌿 Organic Matter</option><option value="paper">📄 Paper</option><option value="plastic">🥤 Plastic</option>';
+            } else {
+                dryBtn.className = 'p-3 rounded-lg border-2 border-blue-500 bg-blue-900/50 text-center transition-all';
+                wetBtn.className = 'p-3 rounded-lg border-2 border-slate-600 bg-slate-800/30 text-center transition-all hover:bg-slate-700/40';
+                wasteSelect.innerHTML = '<option value="paper">📄 Paper (Recommended)</option><option value="plastic">🥤 Plastic (Recommended)</option>';
+            }
+        }
+
+        function showLocationPlaceholder() {
+            document.getElementById('location-details').innerHTML = '<h3 class="text-lg font-semibold mb-4">📍 Select a Location</h3><p class="text-slate-400 text-sm">Click on any location marker on the map</p>';
+        }
+
+        function showLocationDetails(location) {
+            const locRisk = calculateLocationRisk(location);
+            const riskColor = locRisk > 70 ? 'text-red-400' : locRisk > 40 ? 'text-yellow-400' : 'text-green-400';
+            const riskBg = locRisk > 70 ? 'from-red-900/50 to-red-800/30 border-red-600' : locRisk > 40 ? 'from-yellow-900/50 to-yellow-800/30 border-yellow-600' : 'from-green-900/50 to-green-800/30 border-green-600';
+            
+            const wet = location.bins[`${location.id}_WET`];
+            const dry = location.bins[`${location.id}_DRY`];
+            const wetRisk = calculateBinRisk(wet);
+            const dryRisk = calculateBinRisk(dry);
+
+            document.getElementById('location-details').innerHTML = `
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 class="text-lg font-semibold">${location.id}</h3>
+                        <p class="text-sm text-slate-400">${location.name || ''}</p>
+                    </div>
+                    <span class="text-xs px-2 py-1 rounded-full" style="background: ${ROUTE_INFO[location.route].color}40; color: ${ROUTE_INFO[location.route].color}; border: 1px solid ${ROUTE_INFO[location.route].color}">Route ${location.route}</span>
+                </div>
+                
+                ${wet.is_real_hardware ? '<div class="bg-blue-900/40 border border-blue-600 p-2 rounded text-xs text-blue-300 mb-4">⚡ Real Hardware (ESP32) - WET Bin</div>' : ''}
+                
+                <!-- WET Bin -->
+                <div class="bin-card bg-green-900/30 border border-green-600/50 rounded-lg p-3 mb-3">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-semibold text-green-400">💧 WET Bin</span>
+                        <span class="text-sm ${wetRisk > 70 ? 'text-red-400' : wetRisk > 40 ? 'text-yellow-400' : 'text-green-400'}">Risk: ${wetRisk.toFixed(1)}</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 text-xs">
+                        <div class="bg-slate-800/50 p-2 rounded text-center">
+                            <p class="text-slate-400">Fill</p>
+                            <p class="font-bold text-blue-400">${wet.fill_level.toFixed(1)}%</p>
+                        </div>
+                        <div class="bg-slate-800/50 p-2 rounded text-center">
+                            <p class="text-slate-400">Methane</p>
+                            <p class="font-bold ${wet.methane > 300 ? 'text-red-400' : 'text-orange-400'}">${wet.methane.toFixed(0)}ppm</p>
+                        </div>
+                        <div class="bg-slate-800/50 p-2 rounded text-center">
+                            <p class="text-slate-400">Decomp</p>
+                            <p class="font-bold text-amber-400">${wet.decomposition.toFixed(1)}%</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- DRY Bin -->
+                <div class="bin-card bg-blue-900/30 border border-blue-600/50 rounded-lg p-3 mb-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-semibold text-blue-400">📦 DRY Bin</span>
+                        <span class="text-sm ${dryRisk > 70 ? 'text-red-400' : dryRisk > 40 ? 'text-yellow-400' : 'text-green-400'}">Risk: ${dryRisk.toFixed(1)}</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                        <div class="bg-slate-800/50 p-2 rounded text-center">
+                            <p class="text-slate-400">Fill</p>
+                            <p class="font-bold text-blue-400">${dry.fill_level.toFixed(1)}%</p>
+                        </div>
+                        <div class="bg-slate-800/50 p-2 rounded text-center">
+                            <p class="text-slate-400">Weight</p>
+                            <p class="font-bold text-purple-400">${dry.weight.toFixed(0)}g</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Location Risk -->
+                <div class="bg-gradient-to-br ${riskBg} p-4 rounded-lg border">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <span class="text-slate-400 text-sm">Location Risk</span>
+                            <p class="text-xs text-slate-500">MAX(WET, DRY)</p>
+                        </div>
+                        <span class="text-3xl font-bold ${riskColor}">${locRisk.toFixed(1)}</span>
+                    </div>
+                    <div class="mt-2 text-xs">
+                        ${locRisk > 70 ? '🔴 URGENT - Immediate collection!' : locRisk > 40 ? '🟡 WARNING - Schedule soon' : '🟢 SAFE - No action needed'}
+                    </div>
+                </div>
+            `;
+        }
+
+        function showOptimizationResult(data) {
+            const rd = data.all_routes[data.best_route];
+            document.getElementById('opt-route').textContent = data.best_route;
+            document.getElementById('opt-risk').textContent = typeof rd.avg_risk === 'number' ? rd.avg_risk.toFixed(1) : rd.avg_risk;
+            document.getElementById('opt-urgent').textContent = rd.urgent_count;
+            document.getElementById('opt-distance').textContent = rd.distance_km + 'km';
+            
+            // Build route description with DEPOT -> locations -> DUMP
+            let routeDesc = '🏠 DEPOT → ';
+            if (data.collection_order?.length > 0) {
+                routeDesc += data.collection_order.join(' → ') + ' → ';
+            } else {
+                // Show all locations on route
+                const routeLocs = Object.values(allLocations).filter(l => l.route === data.best_route).map(l => l.id);
+                routeDesc += routeLocs.join(' → ') + ' → ';
+            }
+            routeDesc += '🏭 DUMP';
+            
+            let orderHtml = `<br><br>🚛 <strong>Collection Path:</strong><br>${routeDesc}`;
+            document.getElementById('opt-reason').innerHTML = `📍 ${data.reason}${orderHtml}<br><br><small>📊 ${data.formula}</small>`;
+            document.getElementById('opt-comparison').innerHTML = '<strong>All Routes Comparison:</strong><br>' + data.comparison.join('<br>');
+            
+            document.getElementById('optimization-result').classList.remove('hidden');
+            // Pass collection order to draw numbered stops on map
+            selectRoute(data.best_route, data.collection_order);
+            showNotification(`🎯 Route ${data.best_route}: DEPOT → Bins → DUMP`, 'success');
+        }
+
+        function toggleAlertsPanel() {
+            showAlertsPanel = !showAlertsPanel;
+            const panel = document.getElementById('alerts-panel');
+            if (showAlertsPanel) { panel.classList.remove('hidden'); updateAlertsPanel(); }
+            else { panel.classList.add('hidden'); }
+        }
+
+        function updateAlertsPanel() {
+            const alerts = [];
+            for (const loc of Object.values(allLocations)) {
+                const risk = calculateLocationRisk(loc);
+                const wet = loc.bins[`${loc.id}_WET`];
+                if (risk > 70) alerts.push({ severity: 'critical', message: `${loc.id} CRITICAL (${risk.toFixed(1)})`, icon: '🔴' });
+                else if (risk > 40) alerts.push({ severity: 'warning', message: `${loc.id} Warning (${risk.toFixed(1)})`, icon: '🟡' });
+                if (wet && wet.methane > 500) alerts.push({ severity: 'critical', message: `${loc.id} Methane HAZARD (${wet.methane.toFixed(0)}ppm)`, icon: '☠️' });
+                else if (wet && wet.methane > 300) alerts.push({ severity: 'warning', message: `${loc.id} Methane elevated (${wet.methane.toFixed(0)}ppm)`, icon: '⚠️' });
+            }
+            
+            if (alerts.length === 0) {
+                document.getElementById('alerts-content').innerHTML = '<p class="text-green-400 text-center py-4">✅ No alerts - all normal!</p>';
+                return;
+            }
+            document.getElementById('alerts-content').innerHTML = alerts.map(a => `
+                <div class="flex items-center gap-3 p-3 rounded-lg ${a.severity === 'critical' ? 'bg-red-900/40 border border-red-600' : 'bg-yellow-900/40 border border-yellow-600'}">
+                    <span class="text-2xl">${a.icon}</span>
+                    <p class="flex-1 font-medium ${a.severity === 'critical' ? 'text-red-300' : 'text-yellow-300'}">${a.message}</p>
+                </div>
+            `).join('');
+        }
+
+        async function emptySelectedBin() {
+            if (!selectedLocation) return;
+            const binId = `${selectedLocation.id}_${selectedBinType.toUpperCase()}`;
+            if (backendAvailable) {
+                try {
+                    await fetch(`${API_BASE}/locations/${selectedLocation.id}/bins/${binId}/empty`, { method: 'POST' });
+                } catch (err) {}
+            }
+            // Local update
+            const bin = allLocations[selectedLocation.id].bins[binId];
+            bin.fill_level = 0;
+            bin.waste_composition = { food: 0, paper: 0, plastic: 0, organic: 0 };
+            if (bin.type === 'wet') { bin.methane *= 0.1; bin.decomposition = 0; }
+            else { bin.weight = 0; }
+            selectedLocation = allLocations[selectedLocation.id];
+            updateUI();
+            showNotification(`🗑️ ${binId} emptied!`, 'success');
+        }
+
+        async function emptyBothBins() {
+            if (!selectedLocation) return;
+            if (backendAvailable) {
+                try { await fetch(`${API_BASE}/locations/${selectedLocation.id}/collect`, { method: 'POST' }); } catch (err) {}
+            }
+            for (const bin of Object.values(allLocations[selectedLocation.id].bins)) {
+                bin.fill_level = 0;
+                bin.waste_composition = { food: 0, paper: 0, plastic: 0, organic: 0 };
+                if (bin.type === 'wet') { bin.methane *= 0.1; bin.decomposition = 0; }
+                else { bin.weight = 0; }
+            }
+            selectedLocation = allLocations[selectedLocation.id];
+            updateUI();
+            showNotification(`🚛 ${selectedLocation.id} collected!`, 'success');
+        }
+
+        async function collectAllUrgent() {
+            const urgent = Object.values(allLocations).filter(l => calculateLocationRisk(l) > 60);
+            if (urgent.length === 0) { showNotification('No urgent locations!', 'info'); return; }
+            for (const loc of urgent) {
+                if (backendAvailable) { try { await fetch(`${API_BASE}/locations/${loc.id}/collect`, { method: 'POST' }); } catch (err) {} }
+                for (const bin of Object.values(loc.bins)) {
+                    bin.fill_level = 0; bin.waste_composition = { food: 0, paper: 0, plastic: 0, organic: 0 };
+                    if (bin.type === 'wet') { bin.methane *= 0.1; bin.decomposition = 0; }
+                    else { bin.weight = 0; }
+                }
+            }
+            updateUI();
+            showNotification(`🚛 Collected ${urgent.length} urgent locations!`, 'success');
+        }
+
+        function refreshData() { checkBackend().then(() => fetchLocations()); showNotification('🔄 Refreshed!', 'info'); }
+
+        function showNotification(message, type = 'info') {
+            const colors = { success: 'bg-emerald-600 border-emerald-400', warning: 'bg-amber-600 border-amber-400', error: 'bg-red-600 border-red-400', info: 'bg-blue-600 border-blue-400' };
+            const n = document.createElement('div');
+            n.className = `notification fixed top-4 right-4 z-50 ${colors[type]} border-l-4 text-white px-6 py-4 rounded-lg shadow-2xl max-w-md`;
+            n.innerHTML = `<p class="font-medium text-sm">${message}</p>`;
+            document.body.appendChild(n);
+            setTimeout(() => { n.style.opacity = '0'; n.style.transform = 'translateX(100%)'; n.style.transition = 'all 0.3s'; setTimeout(() => n.remove(), 300); }, 4000);
+        }
+
+        // ============================================================
+        // INIT
+        // ============================================================
+        document.addEventListener('DOMContentLoaded', async () => {
+            await checkBackend();
+            await fetchLocations();
+            setInterval(() => { checkBackend(); fetchLocations(); }, 10000);
+        });
+    </script>
+</body>
+</html>

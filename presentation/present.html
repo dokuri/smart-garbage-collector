@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Waste Management System</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; overflow: hidden; }
+
+        .slide {
+            width: 100%; height: 100vh;
+            display: none; flex-direction: column;
+            padding: 28px 50px 20px;
+            animation: fadeIn 0.4s ease-in;
+        }
+        .slide.active { display: flex; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        .theme-primary  { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .theme-accent   { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+        .theme-dark     { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); }
+        .theme-secondary{ background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+
+        /* Typography */
+        .slide h1 { font-size: 2.6em; font-weight: 700; color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.2); margin-bottom: 10px; }
+        .slide h2 { font-size: 2em; font-weight: 700; color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.2); margin-bottom: 14px; }
+        .slide h3 { font-size: 1.15em; font-weight: 600; color: #333; margin-bottom: 10px; }
+        .slide p  { font-size: 1em; color: white; margin-bottom: 8px; line-height: 1.5; }
+
+        /* White card */
+        .content-white {
+            background: white; border-radius: 16px;
+            padding: 24px 32px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.1);
+            flex: 1; display: flex; flex-direction: column; justify-content: center;
+        }
+        .content-white p  { color: #555; font-size: 0.95em; margin-bottom: 8px; }
+        .content-white h3 { color: #667eea; margin-top: 14px; margin-bottom: 8px; font-size: 1.1em; }
+        .content-white ul { list-style: none; margin-left: 10px; }
+        .content-white li {
+            font-size: 0.95em; color: #555;
+            margin: 10px 0; padding-left: 32px; position: relative;
+        }
+        .content-white li:before { content: "✓"; position: absolute; left: 0; color: #4facfe; font-weight: bold; }
+
+        /* Title slide */
+        .title-section { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+        .subtitle { font-size: 1.3em; color: white; opacity: 0.95; margin-bottom: 40px; }
+
+        /* Flow diagram */
+        .flow-diagram { display: flex; justify-content: space-around; align-items: center; margin: 16px 0; gap: 10px; }
+        .flow-box {
+            background: rgba(255,255,255,0.2); padding: 16px 12px;
+            border-radius: 12px; color: white; text-align: center;
+            min-width: 140px; border: 2px solid rgba(255,255,255,0.3);
+        }
+        .flow-box .icon { font-size: 1.8em; margin-bottom: 6px; }
+        .flow-box h4 { color: white; margin-bottom: 4px; font-size: 1em; }
+        .flow-box p  { font-size: 0.85em; margin: 0; }
+        .arrow { color: white; font-size: 1.8em; }
+
+        /* Feature grid */
+        .feature-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 10px; flex: 1; }
+        .feature-item {
+            background: rgba(255,255,255,0.15); padding: 16px 18px;
+            border-radius: 12px; border-left: 4px solid white; backdrop-filter: blur(10px);
+        }
+        .feature-item .fi-title { font-size: 1em; color: white; margin-bottom: 6px; }
+        .feature-item h4 { color: white; font-size: 0.95em; margin-bottom: 6px; }
+        .feature-item p  { color: rgba(255,255,255,0.9); font-size: 0.88em; margin: 0; line-height: 1.6; }
+
+        /* Split layout */
+        .split-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; align-items: start; flex: 1; }
+        .split-layout-content h3 { color: white; margin-bottom: 10px; font-size: 1.1em; }
+        .split-layout-content p  { font-size: 0.95em; margin-bottom: 8px; }
+        .split-layout-visual {
+            background: rgba(255,255,255,0.1); padding: 20px;
+            border-radius: 15px; border: 2px solid rgba(255,255,255,0.2);
+        }
+        .split-layout-visual h3 { color: white; text-align: center; margin-bottom: 12px; font-size: 1.1em; }
+        .split-layout-visual p  { font-size: 0.95em; margin-bottom: 6px; }
+
+        /* Algo steps */
+        .algo-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 16px; }
+        .algo-step {
+            background: rgba(102,126,234,0.3); padding: 14px;
+            border-radius: 10px; border: 2px solid rgba(255,255,255,0.2); color: white;
+        }
+        .algo-step strong { display: block; margin-bottom: 6px; font-size: 0.95em; }
+        .algo-step p { font-size: 0.85em; margin: 0; }
+
+        .formula-box {
+            background: rgba(255,255,255,0.15); padding: 14px 18px;
+            border-radius: 10px; border-left: 4px solid #4facfe; color: white;
+        }
+        .formula-box p { font-size: 0.95em; margin: 0; }
+        .formula-box p + p { margin-top: 8px; opacity: 0.9; font-size: 0.88em; }
+
+        /* Tech stack */
+        .tech-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+        .tech-section h3 { color: #667eea; margin-bottom: 10px; font-size: 1.05em; }
+        .tech-section li { font-size: 0.9em !important; margin: 7px 0 !important; }
+        .tech-footer {
+            background: linear-gradient(90deg,#667eea30,#764ba230);
+            padding: 14px 18px; border-radius: 10px; margin-top: 18px;
+        }
+        .tech-footer p { color: #333; font-size: 0.95em; }
+
+        /* Nav */
+        .controls { position: fixed; bottom: 18px; right: 24px; display: flex; gap: 10px; z-index: 1000; }
+        button {
+            background: #667eea; color: white; border: none;
+            padding: 8px 18px; border-radius: 7px; font-size: 0.9em;
+            cursor: pointer; box-shadow: 0 4px 12px rgba(102,126,234,0.4);
+            transition: all 0.25s;
+        }
+        button:hover { background: #764ba2; transform: translateY(-1px); }
+        .slide-counter { position: fixed; bottom: 18px; left: 24px; color: #667eea; font-size: 0.95em; font-weight: 600; }
+    </style>
+</head>
+<body>
+<div class="presentation-container">
+
+    <!-- Slide 1: Title -->
+    <div class="slide active theme-primary">
+        <div class="title-section" style="align-items: center; text-align: center;">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 160" width="140" height="140" style="margin-bottom: 18px; drop-shadow(0 4px 12px rgba(0,0,0,0.3));">
+                <!-- Lid -->
+                <rect x="15" y="18" width="90" height="14" rx="7" fill="rgba(255,255,255,0.95)"/>
+                <rect x="42" y="8" width="36" height="12" rx="6" fill="rgba(255,255,255,0.85)"/>
+                <!-- Body -->
+                <rect x="20" y="32" width="80" height="100" rx="10" fill="rgba(255,255,255,0.9)"/>
+                <!-- Sensor strip at top of bin -->
+                <rect x="30" y="40" width="60" height="8" rx="4" fill="#667eea" opacity="0.7"/>
+                <!-- Fill level indicator bar background -->
+                <rect x="50" y="56" width="20" height="60" rx="4" fill="rgba(102,126,234,0.15)"/>
+                <!-- Fill level (green = low) -->
+                <rect x="50" y="96" width="20" height="20" rx="3" fill="#10b981"/>
+                <!-- WiFi signal arcs -->
+                <path d="M72 44 Q82 38 92 44" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+                <path d="M75 40 Q82 33 89 40" stroke="white" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.7"/>
+                <!-- Recycling arrows on body -->
+                <text x="60" y="86" text-anchor="middle" font-size="22" fill="#667eea" opacity="0.6">♻</text>
+                <!-- Wheels -->
+                <circle cx="35" cy="134" r="8" fill="rgba(255,255,255,0.7)"/>
+                <circle cx="85" cy="134" r="8" fill="rgba(255,255,255,0.7)"/>
+                <circle cx="35" cy="134" r="3" fill="#667eea"/>
+                <circle cx="85" cy="134" r="3" fill="#667eea"/>
+            </svg>
+            <h1 style="font-size: 3em;">🗑️ Smart Bin</h1>
+            <p class="subtitle" style="margin-bottom: 0;">Route Optimization & Real-Time Monitoring</p>
+        </div>
+    </div>
+
+    <!-- Slide 2: The Problem -->
+    <div class="slide theme-dark">
+        <h2>🚨 The Problem</h2>
+        <div class="content-white">
+            <h3>Current Waste Collection Issues</h3>
+            <ul>
+                <li><strong>Manual Inspection:</strong> Workers manually check each bin</li>
+                <li><strong>Methane Gas:</strong> Organic, biodegradable waste generates Methane</li>
+                <li><strong>Fixed Routes:</strong> Collect all bins on schedule, not based on actual need</li>
+                <li><strong>Overflowing Bins:</strong> No priority system leads to public nuisance</li>
+                <li><strong>No Data:</strong> Can't optimize or predict collection needs</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Slide 3: Solution Overview -->
+    <div class="slide theme-accent">
+        <h2>💡 Our Solution</h2>
+        <div class="flow-diagram">
+            <div class="flow-box">
+                <div class="icon">📡</div>
+                <h4>Sensors</h4>
+                <p>Automatic bin status</p>
+            </div>
+            <div class="arrow">→</div>
+            <div class="flow-box">
+                <div class="icon">🧠</div>
+                <h4>Algorithm</h4>
+                <p>Calculates priority</p>
+            </div>
+            <div class="arrow">→</div>
+            <div class="flow-box">
+                <div class="icon">🚚</div>
+                <h4>Optimized Route</h4>
+                <p>Best collection order</p>
+            </div>
+            <div class="arrow">→</div>
+            <div class="flow-box">
+                <div class="icon">📊</div>
+                <h4>Dashboard</h4>
+                <p>Real-time visibility</p>
+            </div>
+        </div>
+        <div style="text-align:center; margin-top: 24px;">
+            <p style="font-size: 1.05em;">✓ No manual inspection &nbsp;|&nbsp; ✓ Optimized routes &nbsp;|&nbsp; ✓ Real-time data &nbsp;|&nbsp; ✓ Smart decisions</p>
+        </div>
+    </div>
+
+    <!-- Slide 4: System Architecture -->
+    <div class="slide theme-primary">
+        <h2>🏗️ System Architecture</h2>
+        <div class="feature-list">
+            <div class="feature-item">
+                <div class="fi-title">📡 Hardware Layer</div>
+                <h4>IoT Sensors on Bins</h4>
+                <p>• Ultrasonic (fill level)<br>• Gas sensors (methane, CO2)<br>• Load cell (weight)<br>• WiFi transmission</p>
+            </div>
+            <div class="feature-item">
+                <div class="fi-title">🧠 Backend Layer</div>
+                <h4>Intelligence Engine</h4>
+                <p>• Risk calculation<br>• Route optimization<br>• REST API</p>
+            </div>
+            <div class="feature-item">
+                <div class="fi-title">🌐 Frontend Layer</div>
+                <h4>User Dashboard</h4>
+                <p>• City map visualization<br>• Real-time status<br>• Route recommendations<br>• Alert notifications</p>
+            </div>
+            <div class="feature-item">
+                <div class="fi-title">📦 Deployment</div>
+                <h4>8 Locations, 16 Bins</h4>
+                <p>• Route A: 3 locations<br>• Route B: 3 locations<br>• Route C: 2 locations<br>• 2 bins per location</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 5: Key Features -->
+    <div class="slide theme-secondary">
+        <h2>⭐ Key Features</h2>
+        <div class="split-layout">
+            <div class="split-layout-content">
+                <h3>Real-Time Monitoring</h3>
+                <p>✓ Automatic fill level detection</p>
+                <p>✓ Methane gas monitoring</p>
+                <p>✓ Weight tracking</p>
+                <p>✓ Sensors update every 10 seconds</p>
+                <h3 style="margin-top: 18px;">Risk Calculation</h3>
+                <p>✓ Environmental priority</p>
+                <p>✓ Overflow prevention</p>
+                <p>✓ Smart urgency scoring</p>
+            </div>
+            <div class="split-layout-visual">
+                <h3>Route Optimization</h3>
+                <div style="background:rgba(255,255,255,0.1); padding:14px; border-radius:10px; color:white;">
+                    <p>Evaluates all 3 routes</p>
+                    <p>Selects best route based on:</p>
+                    <ul style="list-style:none; margin-top:8px;">
+                        <li style="margin-bottom:5px;">• Average risk level</li>
+                        <li style="margin-bottom:5px;">• Number of urgent bins</li>
+                        <li>• Total distance</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 6: Route Optimization Algorithm -->
+    <div class="slide theme-primary">
+        <h2>🤖 Route Optimization Algorithm</h2>
+        <div style="background:rgba(255,255,255,0.1); padding:22px; border-radius:15px; backdrop-filter:blur(10px); flex:1; display:flex; flex-direction:column; justify-content:center;">
+            <h3 style="color:white; margin-bottom:16px; font-size:1.05em;">Algorithm: Greedy Nearest Neighbor + 2-Opt Improvement</h3>
+            <div class="algo-grid">
+                <div class="algo-step"><strong>Step 1</strong><p>Calculate urgency for each location</p></div>
+                <div class="algo-step"><strong>Step 2</strong><p>Score each route A, B, C</p></div>
+                <div class="algo-step"><strong>Step 3</strong><p>Select highest score route</p></div>
+                <div class="algo-step"><strong>Step 4</strong><p>Optimize collection order</p></div>
+            </div>
+            <div class="formula-box">
+                <p><strong>Formula:</strong> Score = (avg_risk × 0.6 + urgent_count × 20) / (1 + distance × 0.02)</p>
+                <p>Higher score = better route</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 7: Technology Stack -->
+    <div class="slide theme-dark">
+        <h2>💻 Technology Stack</h2>
+        <div class="content-white">
+            <div class="tech-grid">
+                <div class="tech-section">
+                    <h3>Frontend</h3>
+                    <ul>
+                        <li>HTML5 + CSS3</li>
+                        <li>JavaScript (ES6+)</li>
+                        <li>SVG City Map</li>
+                        <li>Responsive Design</li>
+                    </ul>
+                </div>
+                <div class="tech-section">
+                    <h3>Backend</h3>
+                    <ul>
+                        <li>Python 3.8+</li>
+                        <li>Flask Framework</li>
+                        <li>REST API</li>
+                    </ul>
+                </div>
+                <div class="tech-section">
+                    <h3>Hardware</h3>
+                    <ul>
+                        <li>ESP32 DevKit</li>
+                        <li>Ultrasonic Sensor</li>
+                        <li>Gas Sensors (MQ-4, MQ-135)</li>
+                        <li>Load Cell + HX711</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="tech-footer">
+                <p><strong>Communication:</strong> WiFi HTTP REST API with JSON data format</p>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<div class="slide-counter"><span id="cur">1</span> / <span id="tot">7</span></div>
+<div class="controls">
+    <button onclick="go(-1)">← Previous</button>
+    <button onclick="go(1)">Next →</button>
+    <button onclick="fs()">⛶ Fullscreen</button>
+</div>
+
+<script>
+    let c = 0;
+    const slides = document.querySelectorAll('.slide');
+    const n = slides.length;
+    document.getElementById('tot').textContent = n;
+
+    function go(d) {
+        slides[c].classList.remove('active');
+        c = (c + d + n) % n;
+        slides[c].classList.add('active');
+        document.getElementById('cur').textContent = c + 1;
+    }
+    function fs() {
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(()=>{});
+        else document.exitFullscreen();
+    }
+    document.addEventListener('keydown', e => {
+        if (e.key === 'ArrowRight' || e.key === ' ') go(1);
+        else if (e.key === 'ArrowLeft') go(-1);
+        else if (e.key === 'f') fs();
+    });
+</script>
+</body>
+</html>
